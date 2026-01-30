@@ -1,0 +1,82 @@
+# Documentation (excluded from git)
+docs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Data files
+data/raw/*.jpg
+data/raw/*.png
+data/raw/*.jpeg
+data/embeddings/*.npy
+
+# Models (too large for git)
+models/**/*.pkl
+models/**/*.pt
+models/**/*.h5
+models/**/*.pth
+models/**/*.index
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Experiments
+experiments/*.csv
+experiments/*.png
+experiments/visualizations/
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Docker
+.dockerignore
+
+# Keep structure
+!data/.gitkeep
+!models/.gitkeep
+!mlruns/.gitkeep
+!experiments/.gitkeep
+
+
+.claude/
+data/
+

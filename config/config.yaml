@@ -1,0 +1,84 @@
+# Multimodal Recommender System Configuration
+
+# Data Configuration
+data:
+  dataset_name: "pinterest_style"
+  num_items: 10000
+  num_users: 1000
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  min_interactions: 5
+  image_size: 224
+
+# Embedding Configuration
+embeddings:
+  model_name: "openai/clip-vit-base-patch32"
+  embedding_dim: 512
+  batch_size: 32
+  device: "cuda"  # or "cpu"
+  cache_embeddings: true
+
+# Collaborative Filtering Configuration
+collaborative_filtering:
+  matrix_factorization:
+    factors: 128
+    regularization: 0.01
+    iterations: 15
+    alpha: 1.0
+
+  neural_cf:
+    embedding_dim: 64
+    hidden_layers: [128, 64, 32]
+    dropout: 0.2
+    learning_rate: 0.001
+    batch_size: 256
+    epochs: 20
+
+# Candidate Generation Configuration
+candidate_generation:
+  num_candidates: 100
+  retrieval_methods:
+    - collaborative_filtering
+    - content_based
+    - hybrid
+  vector_index: "faiss"  # or "annoy"
+  similarity_metric: "cosine"
+
+# Re-Ranking Configuration
+reranking:
+  model_type: "neural"
+  hidden_dims: [256, 128, 64]
+  dropout: 0.3
+  learning_rate: 0.0005
+  batch_size: 128
+  epochs: 15
+  loss_function: "listwise"  # pointwise, pairwise, listwise
+
+# Evaluation Configuration
+evaluation:
+  metrics:
+    - "precision@k"
+    - "recall@k"
+    - "ndcg@k"
+  k_values: [5, 10, 20]
+
+# MLflow Configuration
+mlflow:
+  experiment_name: "multimodal_recommender"
+  tracking_uri: "mlruns"
+  artifact_location: "artifacts"
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  max_recommendations: 20
+  timeout: 30
+
+# Performance Testing
+performance:
+  num_requests: 1000
+  concurrent_users: 10
+  ramp_up_time: 5
