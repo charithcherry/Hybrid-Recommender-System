@@ -1,0 +1,28 @@
+# Test Commands for Multimodal Recommender API
+
+## Health Check
+curl http://localhost:8000/health
+
+## System Statistics
+curl http://localhost:8000/stats
+
+## Get Recommendations for User 0 (10 items)
+curl http://localhost:8000/recommend/0?n=10
+
+## Get Recommendations for User 5
+curl http://localhost:8000/recommend/5?n=5
+
+## Get Similar Items to Item 100
+curl http://localhost:8000/similar/100?n=5
+
+## Get Item Information
+curl http://localhost:8000/items/100
+
+## API Root Info
+curl http://localhost:8000/
+
+# For formatted JSON output (if you have jq):
+curl http://localhost:8000/recommend/0?n=10 | jq
+
+# Using PowerShell (Windows):
+Invoke-RestMethod -Uri "http://localhost:8000/recommend/0?n=10" | ConvertTo-Json -Depth 10
