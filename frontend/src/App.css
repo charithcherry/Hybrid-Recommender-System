@@ -1,0 +1,253 @@
+/**
+ * Main App Styles - Sidebar + Filter Bar + Content Layout
+ */
+
+/* Global Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #f8f9fa;
+}
+
+/* App Container with Sidebar */
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  background: #f8f9fa;
+}
+
+/* Main Content Area (Right side, next to sidebar) */
+.main-content {
+  flex: 1;
+  margin-left: 220px; /* Sidebar width */
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* App Header */
+.app-header {
+  background: white;
+  padding: 20px 32px;
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.app-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #333;
+  margin: 0;
+}
+
+/* Content Area */
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Tab Styles */
+.popular-tab,
+.foryou-tab {
+  padding: 24px;
+}
+
+.tab-header {
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.tab-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #333;
+  margin: 0 0 8px 0;
+}
+
+.tab-description {
+  font-size: 15px;
+  color: #666;
+  margin: 0;
+}
+
+/* Recommendation Sections */
+.recommendation-section {
+  margin-bottom: 48px;
+}
+
+.section-header {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, #fff5f6 0%, #ffffff 100%);
+  border-left: 4px solid #e60023;
+  border-radius: 8px;
+}
+
+.section-header h3 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #333;
+  margin: 0 0 6px 0;
+}
+
+.section-header p {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+}
+
+/* Loading State */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  color: #666;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #e60023;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-state p {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Empty Recommendations */
+.empty-recommendations {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 72px;
+  margin-bottom: 24px;
+  opacity: 0.6;
+}
+
+.empty-recommendations h3 {
+  font-size: 24px;
+  color: #333;
+  margin: 0 0 12px 0;
+}
+
+.empty-recommendations p {
+  font-size: 16px;
+  color: #666;
+  margin: 0 0 24px 0;
+  max-width: 400px;
+}
+
+.btn-primary {
+  padding: 14px 32px;
+  background: linear-gradient(135deg, #e60023 0%, #c8001f 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(230, 0, 35, 0.3);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #c8001f 0%, #a8001a 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(230, 0, 35, 0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Toast Notifications */
+.Toastify__toast {
+  font-family: inherit;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.Toastify__toast--success {
+  background: linear-gradient(135deg, #e60023 0%, #c8001f 100%);
+  color: white;
+}
+
+.Toastify__toast--error {
+  background: linear-gradient(135deg, #333 0%, #1a1a1a 100%);
+  color: white;
+  border-color: #e60023;
+}
+
+.Toastify__toast--info {
+  background: linear-gradient(135deg, #555 0%, #333 100%);
+  color: white;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 70px; /* Collapsed sidebar width */
+  }
+
+  .app-header {
+    padding: 16px 20px;
+  }
+
+  .app-title {
+    font-size: 22px;
+  }
+
+  .popular-tab,
+  .foryou-tab {
+    padding: 16px;
+  }
+
+  .tab-header h2 {
+    font-size: 22px;
+  }
+
+  .section-header h3 {
+    font-size: 18px;
+  }
+
+  .section-header {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    margin-left: 0;
+  }
+
+  /* Hide sidebar on very small screens or make it overlay */
+}

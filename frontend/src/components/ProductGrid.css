@@ -1,0 +1,52 @@
+/* Product Grid - Pinterest Masonry Layout */
+
+.product-grid {
+  display: flex;
+  margin-left: -20px; /* Gutter size */
+  width: auto;
+}
+
+.product-grid-column {
+  padding-left: 20px; /* Gutter size */
+  background-clip: padding-box;
+}
+
+/* Responsive column widths */
+.product-grid-column > div {
+  margin-bottom: 20px;
+}
+
+/* Loading state */
+.loading-container {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.loading-container .spinner {
+  margin: 0 auto 1rem;
+}
+
+.loading-container p {
+  color: #666;
+  font-size: 1.1rem;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.empty-state h2 {
+  font-size: 1.8rem;
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.empty-state p {
+  color: #666;
+  font-size: 1.1rem;
+}

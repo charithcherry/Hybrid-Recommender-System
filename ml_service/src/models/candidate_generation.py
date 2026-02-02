@@ -30,7 +30,8 @@ class CandidateGenerator:
 
         # Models
         self.cf_model = None
-        self.item_embeddings = None
+        self.item_embeddings = None  # Filtered embeddings (only training items)
+        self.full_item_embeddings = None  # ALL 44K product embeddings
         self.user_mapping = None
         self.item_mapping = None
 
@@ -56,8 +57,12 @@ class CandidateGenerator:
             embeddings_path: Path to embeddings file
         """
         print(f"Loading embeddings from {embeddings_path}")
-        self.item_embeddings = np.load(embeddings_path)
-        print(f"Loaded embeddings with shape {self.item_embeddings.shape}")
+        full_embeddings = np.load(embeddings_path)
+        print(f"Loaded embeddings with shape {full_embeddings.shape}")
+
+        # Keep FULL embeddings for querying new items
+        self.full_item_embeddings = full_embeddings.copy()
+        self.item_embeddings = full_embeddings  # Will be filtered later in build_vector_index
 
     def build_vector_index(self):
         """Build FAISS index for fast similarity search."""
@@ -157,42 +162,54 @@ class CandidateGenerator:
         top_k = min(5, len(user_items))
         representative_items = user_items[:top_k]
 
-        # Get embeddings for representative items
-        item_indices = []
-        for item_id in representative_items:
-            if item_id in self.item_mapping['to_idx']:
-                item_indices.append(self.item_mapping['to_idx'][item_id])
+        print(f"Representative items for query: {representative_items[:10]}")
 
-        if len(item_indices) == 0:
-            return []
-
-        # Compute average embedding as query
-        query_embedding = np.mean(self.item_embeddings[item_indices], axis=0)
-
-        # Normalize for cosine similarity
-        query_embedding = query_embedding / (np.linalg.norm(query_embedding) + 1e-8)
-
-        # Search similar items
-        k = min(n * 2, self.vector_index.ntotal)  # Get more to allow filtering
-        distances, indices = self.vector_index.search(
-            query_embedding.reshape(1, -1).astype('float32'), k
-        )
-
-        # Convert to recommendations
-        recommendations = []
+        # IMPROVED STRATEGY: Query each liked item separately, then combine
+        # This prevents mixing different categories (watches + backpacks)
+        all_recommendations = {}  # {item_id: max_score}
         seen_items = set(user_items)
 
-        for idx, score in zip(indices[0], distances[0]):
-            item_id = self.item_mapping['to_id'][int(idx)]
+        for query_item_id in representative_items[:10]:  # Query top 10 liked items
+            # Get embedding for this item
+            query_emb = None
 
-            # Filter already seen items
-            if item_id in seen_items:
+            if query_item_id in self.item_mapping['to_idx']:
+                # Item in index
+                item_idx = self.item_mapping['to_idx'][query_item_id]
+                query_emb = self.item_embeddings[item_idx]
+            elif self.full_item_embeddings is not None and query_item_id < len(self.full_item_embeddings):
+                # Item has embedding but not in index - use full embedding
+                query_emb = self.full_item_embeddings[query_item_id]
+                print(f"Using full embedding for item {query_item_id}")
+
+            if query_emb is None:
                 continue
 
-            recommendations.append((item_id, float(score), 'content'))
+            # Normalize
+            query_emb = query_emb / (np.linalg.norm(query_emb) + 1e-8)
 
-            if len(recommendations) >= n:
-                break
+            # Query FAISS for similar items
+            k = min(20, self.vector_index.ntotal)
+            distances, indices = self.vector_index.search(
+                query_emb.reshape(1, -1).astype('float32'), k
+            )
+
+            # Add results to recommendations dict (keep highest score)
+            for idx, score in zip(indices[0], distances[0]):
+                item_id = self.item_mapping['to_id'][int(idx)]
+
+                # Skip already seen items
+                if item_id in seen_items:
+                    continue
+
+                # Keep highest score if item already found
+                if item_id not in all_recommendations or score > all_recommendations[item_id]:
+                    all_recommendations[item_id] = float(score)
+
+        # Convert to list and sort by score
+        recommendations = [(item_id, score, 'content') for item_id, score in sorted(all_recommendations.items(), key=lambda x: x[1], reverse=True)[:n]]
+
+        print(f"Generated {len(recommendations)} recommendations from {len(representative_items)} query items")
 
         return recommendations
 
@@ -301,6 +318,7 @@ class CandidateGenerator:
             'user_mapping': self.user_mapping,
             'item_mapping': self.item_mapping,
             'item_embeddings': self.item_embeddings,
+            'full_item_embeddings': getattr(self, 'full_item_embeddings', None),
         }
 
         with open(path, 'wb') as f:
@@ -332,6 +350,7 @@ class CandidateGenerator:
         instance.user_mapping = state['user_mapping']
         instance.item_mapping = state['item_mapping']
         instance.item_embeddings = state.get('item_embeddings', None)
+        instance.full_item_embeddings = state.get('full_item_embeddings', None)
 
         # Load FAISS index
         index_path = Path(path).parent / f"{Path(path).stem}_faiss.index"
