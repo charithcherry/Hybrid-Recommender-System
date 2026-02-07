@@ -14,6 +14,15 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.config_loader import get_config
 
 
+# Adaptive weighting tiers based on user interaction count
+# Format: (min_interactions, cf_weight, content_weight, popular_weight)
+ADAPTIVE_WEIGHT_TIERS = [
+    (20, 0.70, 0.20, 0.10),  # Established users: trust CF
+    (5,  0.40, 0.40, 0.20),  # Warm start: balanced approach
+    (0,  0.10, 0.60, 0.30),  # Cold start: trust content + popular
+]
+
+
 class CandidateGenerator:
     """Hybrid candidate generation combining CF and content-based retrieval."""
 
@@ -249,25 +258,60 @@ class CandidateGenerator:
 
         return recommendations
 
+    def get_adaptive_weights(self, interaction_count: int) -> Tuple[float, float, float]:
+        """Get adaptive weights based on user's interaction count.
+
+        Args:
+            interaction_count: Number of interactions (rating >= 3) the user has
+
+        Returns:
+            Tuple of (cf_weight, content_weight, popular_weight)
+        """
+        for min_count, cf_w, content_w, pop_w in ADAPTIVE_WEIGHT_TIERS:
+            if interaction_count >= min_count:
+                return (cf_w, content_w, pop_w)
+
+        # Default to coldstart weights if no tier matches
+        return ADAPTIVE_WEIGHT_TIERS[-1][1:]
+
     def generate_hybrid_candidates(self, user_id: int,
                                    interactions_df: pd.DataFrame,
                                    n: int = 100,
-                                   cf_weight: float = 0.5,
-                                   content_weight: float = 0.3,
-                                   popular_weight: float = 0.2) -> List[Tuple[int, float, Dict]]:
+                                   adaptive_weights: bool = True,
+                                   cf_weight: float = None,
+                                   content_weight: float = None,
+                                   popular_weight: float = None) -> List[Tuple[int, float, Dict]]:
         """Generate hybrid candidates combining multiple strategies.
 
         Args:
             user_id: User ID
             interactions_df: User interactions
             n: Total number of candidates
-            cf_weight: Weight for CF candidates
-            content_weight: Weight for content-based candidates
-            popular_weight: Weight for popularity-based candidates
+            adaptive_weights: If True, automatically determine weights based on user profile
+            cf_weight: Weight for CF candidates (manual override)
+            content_weight: Weight for content-based candidates (manual override)
+            popular_weight: Weight for popularity-based candidates (manual override)
 
         Returns:
             List of (item_id, score, metadata) tuples
         """
+        # Determine weights (adaptive or manual)
+        if adaptive_weights and all(w is None for w in [cf_weight, content_weight, popular_weight]):
+            # Count user interactions (liked items)
+            user_interactions = interactions_df[interactions_df['user_id'] == user_id]
+            interaction_count = len(user_interactions[user_interactions['rating'] >= 3])
+
+            # Get adaptive weights based on interaction count
+            cf_weight, content_weight, popular_weight = self.get_adaptive_weights(interaction_count)
+
+            print(f"[Adaptive Weights] User {user_id}: {interaction_count} interactions → "
+                  f"CF:{cf_weight:.2f}, content:{content_weight:.2f}, popular:{popular_weight:.2f}")
+        else:
+            # Use provided weights or defaults
+            cf_weight = cf_weight if cf_weight is not None else 0.5
+            content_weight = content_weight if content_weight is not None else 0.3
+            popular_weight = popular_weight if popular_weight is not None else 0.2
+
         # Number of candidates from each source
         n_cf = int(n * cf_weight)
         n_content = int(n * content_weight)

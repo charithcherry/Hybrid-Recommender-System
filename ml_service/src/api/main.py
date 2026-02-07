@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from typing import List, Optional, Dict, Literal
+from typing import List, Optional, Dict, Literal, Tuple
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
@@ -187,6 +187,7 @@ class AppState:
         self.interactions: List[dict] = []  # [{interaction_id, user_id, item_id, type, rating, timestamp}]
         self.interaction_states: Dict[int, Dict[int, str]] = {}  # {user_id: {item_id: interaction_type}}
         self.item_interaction_counts: Dict[int, int] = {}  # {item_id: count} - real-time interaction counts
+        self.category_specialist_index: Dict[str, List[Tuple[int, float]]] = {}  # {category: [(user_id, specialization_score)]}
         self.next_user_id: int = 1000  # Start after training users (0-999)
         self.next_interaction_id: int = 0
 
@@ -200,6 +201,24 @@ INTERACTION_RATINGS = {
     'dislike': 1,
     'save': 4,
     'buy': 5
+}
+
+# Related categories for cross-category discovery (70% same, 20% related, 10% diverse)
+RELATED_CATEGORIES = {
+    'Watches': ['Belts', 'Cufflinks', 'Ties', 'Wallets', 'Sunglasses', 'Jewellery'],
+    'Shoes': ['Socks', 'Flip Flops', 'Sandals', 'Shoe Accessories'],
+    'Casual Shoes': ['Socks', 'Flip Flops', 'Sandals', 'Sports Shoes'],
+    'Sports Shoes': ['Socks', 'Track Pants', 'Shorts', 'Tshirts'],
+    'Formal Shoes': ['Socks', 'Formal Trousers', 'Shirts', 'Ties', 'Belts'],
+    'Shirts': ['Ties', 'Belts', 'Jackets', 'Sweaters', 'Blazers'],
+    'Tshirts': ['Jeans', 'Shorts', 'Track Pants', 'Casual Shoes'],
+    'Jeans': ['Belts', 'Casual Shoes', 'Tshirts', 'Shirts'],
+    'Backpacks': ['Wallets', 'Belts', 'Accessories', 'Caps'],
+    'Handbags': ['Wallets', 'Sunglasses', 'Watches', 'Jewellery'],
+    'Jackets': ['Shirts', 'Sweaters', 'Jeans', 'Casual Shoes'],
+    'Sweaters': ['Shirts', 'Jeans', 'Jackets', 'Casual Shoes'],
+    'Caps': ['Tshirts', 'Sunglasses', 'Backpacks', 'Casual Shoes'],
+    'Sunglasses': ['Watches', 'Caps', 'Handbags', 'Wallets']
 }
 
 # JSON file paths for persistence
@@ -295,6 +314,223 @@ def load_interaction_states_from_json():
         print(f"Error loading interaction states: {e}")
 
 
+def build_category_specialist_index(
+    train_df: pd.DataFrame,
+    products_df: pd.DataFrame,
+    min_specialization: float = 0.30,
+    min_interactions: int = 5,
+    max_specialists: int = 50
+) -> Dict[str, List[Tuple[int, float]]]:
+    """Build specialist index at startup. O(users * interactions) once.
+
+    Args:
+        train_df: Training interactions DataFrame
+        products_df: Products DataFrame with categories
+        min_specialization: Minimum % of items in category to be specialist (default 30%)
+        min_interactions: Minimum interactions required to be considered
+        max_specialists: Maximum specialists to keep per category
+
+    Returns:
+        Dict mapping category to list of (user_id, specialization_score) tuples
+    """
+    from collections import defaultdict
+
+    specialist_index = defaultdict(list)
+
+    for user_id in range(1000):  # Training users 0-999
+        # Get liked items (rating >= 3)
+        user_interactions = train_df[
+            (train_df['user_id'] == user_id) &
+            (train_df['rating'] >= 3)
+        ]
+
+        if len(user_interactions) < min_interactions:
+            continue
+
+        # Join with products to get categories
+        item_ids = user_interactions['item_id'].tolist()
+        products = products_df[products_df['id'].isin(item_ids)]
+
+        if len(products) == 0:
+            continue
+
+        # Count items per category
+        category_counts = products['articleType'].value_counts()
+        total_items = len(products)
+
+        # Add to index for categories where user is specialist (>= 30%)
+        for category, count in category_counts.items():
+            specialization = count / total_items
+            if specialization >= min_specialization:
+                specialist_index[category].append((user_id, specialization))
+
+    # Sort by specialization score, keep top N
+    for category in specialist_index:
+        specialist_index[category] = sorted(
+            specialist_index[category],
+            key=lambda x: x[1],
+            reverse=True
+        )[:max_specialists]
+
+    return dict(specialist_index)
+
+
+def get_category_specialists(category: str, top_k: int = 20) -> List[Tuple[int, float]]:
+    """O(1) lookup of category specialists.
+
+    Args:
+        category: Product category (articleType)
+        top_k: Number of top specialists to return
+
+    Returns:
+        List of (user_id, specialization_score) tuples, sorted by score descending
+    """
+    if category not in state.category_specialist_index:
+        return []
+    return state.category_specialist_index[category][:top_k]
+
+
+def detect_user_interest_clusters(
+    user_interactions: List[dict],
+    products_df: pd.DataFrame,
+    min_percentage: float = 0.20,
+    min_items: int = 3,
+    max_clusters: int = 3
+) -> List[Tuple[str, float, List[int]]]:
+    """Detect multiple interest clusters from user interactions.
+
+    Args:
+        user_interactions: List of interaction dicts with item_id and rating
+        products_df: Products DataFrame
+        min_percentage: Minimum % of items to form a cluster (default 20%)
+        min_items: Minimum items to form a cluster (default 3)
+        max_clusters: Maximum number of clusters to return (default 3)
+
+    Returns:
+        List of (category, weight, item_ids) tuples, sorted by weight descending
+    """
+    # Get liked items (rating >= 3)
+    liked_items = [i for i in user_interactions if i.get('rating', 0) >= 3]
+    if len(liked_items) == 0:
+        return []
+
+    item_ids = [i['item_id'] for i in liked_items]
+    products = products_df[products_df['id'].isin(item_ids)]
+
+    if len(products) == 0:
+        return []
+
+    # Count items per category (articleType)
+    category_counts = products['articleType'].value_counts()
+    total_items = len(products)
+
+    # Identify significant clusters (>= 20% OR >= 3 items)
+    clusters = []
+    for category, count in category_counts.items():
+        percentage = count / total_items
+        if percentage >= min_percentage or count >= min_items:
+            category_items = products[products['articleType'] == category]['id'].tolist()
+            clusters.append((category, percentage, category_items))
+
+    # Sort by weight descending, take top N
+    clusters = sorted(clusters, key=lambda x: x[1], reverse=True)[:max_clusters]
+
+    # Normalize weights to sum to 1.0
+    total_weight = sum(w for _, w, _ in clusters)
+    if total_weight > 0:
+        clusters = [(cat, w/total_weight, items) for cat, w, items in clusters]
+
+    return clusters
+
+
+def generate_multi_interest_cf_candidates(
+    clusters: List[Tuple[str, float, List[int]]],
+    n: int = 50,
+    diversity_mix: Tuple[float, float, float] = (0.7, 0.2, 0.1)
+) -> List[Tuple[int, float]]:
+    """Generate CF candidates from multiple interest clusters.
+
+    Args:
+        clusters: List of (category, weight, item_ids) tuples
+        n: Total number of recommendations
+        diversity_mix: (same_category, related_category, diverse_category) ratios
+
+    Returns:
+        List of (item_id, score) tuples, sorted by score descending
+    """
+    all_candidates = {}  # {item_id: score}
+    user_liked_items = set()
+    for _, _, items in clusters:
+        user_liked_items.update(items)
+
+    # Allocate recommendation budget proportionally
+    for category, weight, cluster_items in clusters:
+        budget = int(n * weight)
+        if budget == 0:
+            continue
+
+        # Get specialists for this category (using Phase 1 optimization!)
+        specialists = get_category_specialists(category, top_k=15)
+        if len(specialists) == 0:
+            continue
+
+        # Collect items liked by specialists
+        cluster_candidates = {}  # {item_id: score}
+
+        for specialist_id, specialist_score in specialists:
+            specialist_items = state.train_df[
+                (state.train_df['user_id'] == specialist_id) &
+                (state.train_df['rating'] >= 3)
+            ]['item_id'].tolist()
+
+            for item_id in specialist_items:
+                if item_id not in user_liked_items:
+                    if item_id not in cluster_candidates:
+                        cluster_candidates[item_id] = 0
+                    cluster_candidates[item_id] += specialist_score
+
+        # Apply category-aware filtering (70% same, 20% related, 10% diverse)
+        same_cat = []
+        related_cat = []
+        diverse_cat = []
+
+        for item_id, score in cluster_candidates.items():
+            product = state.products_df[state.products_df['id'] == item_id]
+            if len(product) == 0:
+                continue
+
+            item_category = product.iloc[0]['articleType']
+
+            if item_category == category:
+                same_cat.append((item_id, score))
+            elif category in RELATED_CATEGORIES and item_category in RELATED_CATEGORIES[category]:
+                related_cat.append((item_id, score))
+            else:
+                diverse_cat.append((item_id, score))
+
+        # Sort by score
+        same_cat = sorted(same_cat, key=lambda x: x[1], reverse=True)
+        related_cat = sorted(related_cat, key=lambda x: x[1], reverse=True)
+        diverse_cat = sorted(diverse_cat, key=lambda x: x[1], reverse=True)
+
+        # Allocate budget (70% same, 20% related, 10% diverse)
+        same_n = int(budget * diversity_mix[0])
+        related_n = int(budget * diversity_mix[1])
+        diverse_n = int(budget * diversity_mix[2])
+
+        # Take top items from each category
+        cluster_recs = same_cat[:same_n] + related_cat[:related_n] + diverse_cat[:diverse_n]
+
+        # Add to final candidates with cluster weight
+        for item_id, score in cluster_recs:
+            final_score = score * weight  # Weight by cluster importance
+            if item_id not in all_candidates or final_score > all_candidates[item_id]:
+                all_candidates[item_id] = final_score
+
+    # Sort by final score and return top n
+    return sorted(all_candidates.items(), key=lambda x: x[1], reverse=True)[:n]
+
+
 @app.on_event("startup")
 async def startup_event():
     """Load models on startup."""
@@ -369,6 +605,16 @@ async def startup_event():
         load_users_from_json()
         load_interactions_from_json()
         load_interaction_states_from_json()
+
+        # Build category specialist index for fast CF lookups
+        if state.train_df is not None and state.products_df is not None:
+            state.category_specialist_index = build_category_specialist_index(
+                state.train_df,
+                state.products_df
+            )
+            print(f"Built category specialist index for {len(state.category_specialist_index)} categories")
+        else:
+            print("Warning: Could not build specialist index - missing data")
 
         print("Startup complete!")
 
@@ -492,7 +738,8 @@ async def get_recommendations(request: RecommendationRequest):
                 candidates = state.candidate_generator.generate_hybrid_candidates(
                     request.user_id,
                     state.train_df,
-                    n=100
+                    n=100,
+                    adaptive_weights=True  # Phase 3: Enable adaptive weighting
                 )
                 candidate_items = [item_id for item_id, _, _ in candidates]
 
@@ -506,7 +753,8 @@ async def get_recommendations(request: RecommendationRequest):
             candidates = state.candidate_generator.generate_hybrid_candidates(
                 request.user_id,
                 state.train_df,
-                n=100
+                n=100,
+                adaptive_weights=True  # Phase 3: Enable adaptive weighting
             )
 
             candidate_items = [item_id for item_id, _, _ in candidates]
@@ -772,101 +1020,24 @@ async def get_split_recommendations(
 
                             print(f"Created user embedding from {len(liked_embeddings)} liked items")
 
-                            # Step 2: Find CATEGORY SPECIALISTS (users who primarily like same category)
-                            # Get user's primary category
-                            liked_products = state.products_df[state.products_df['id'].isin(liked_item_ids)]
-                            primary_category = liked_products['articleType'].mode().iloc[0] if len(liked_products) > 0 else None
+                            # Step 2: MULTI-INTEREST CLUSTERING (Phase 2)
+                            # Detect multiple interest clusters (e.g., watches + backpacks + shoes)
+                            print(f"Detecting interest clusters from {len(user_interactions)} interactions...")
+                            clusters = detect_user_interest_clusters(user_interactions, state.products_df)
 
-                            print(f"Finding users who specialize in: {primary_category}")
+                            if len(clusters) > 0:
+                                # Multi-interest user: recommend from ALL clusters proportionally
+                                print(f"Found {len(clusters)} interest clusters:")
+                                for cat, weight, items in clusters:
+                                    print(f"  - {cat}: {weight*100:.1f}% ({len(items)} items)")
 
-                            category_specialist_users = {}
-
-                            for train_user_id in range(1000):  # Training users are 0-999
-                                train_interactions = state.train_df[
-                                    (state.train_df['user_id'] == train_user_id) &
-                                    (state.train_df['rating'] >= 3)
-                                ]
-
-                                if len(train_interactions) >= 5:  # At least 5 interactions
-                                    train_items = train_interactions['item_id'].tolist()
-
-                                    # Check what % of their likes are in primary category
-                                    train_products = state.products_df[state.products_df['id'].isin(train_items)]
-                                    if len(train_products) > 0:
-                                        category_count = len(train_products[train_products['articleType'] == primary_category])
-                                        category_percentage = category_count / len(train_products)
-
-                                        # Find users with at least 30% in same category
-                                        if category_percentage >= 0.3:
-                                            category_specialist_users[train_user_id] = category_percentage
-
-                            # Get top 20 category specialists
-                            similar_users = sorted(category_specialist_users.items(), key=lambda x: x[1], reverse=True)[:20]
-                            top_percentage = similar_users[0][1] * 100 if similar_users else 0
-                            print(f"Found {len(similar_users)} {primary_category} specialists, top: {top_percentage:.1f}% category focus")
-
-                            # Step 4: Get items liked by similar users
-                            candidate_items = {}  # {item_id: score}
-                            user_liked_set = set(liked_item_ids)
-
-                            for similar_uid, similarity_score in similar_users:
-                                similar_user_items = state.train_df[
-                                    (state.train_df['user_id'] == similar_uid) &
-                                    (state.train_df['rating'] >= 3)
-                                ]['item_id'].tolist()
-
-                                for item_id in similar_user_items:
-                                    if item_id not in user_liked_set:  # Exclude already liked
-                                        if item_id not in candidate_items:
-                                            candidate_items[item_id] = 0
-                                        candidate_items[item_id] += similarity_score
-
-                            # Step 5: Category-aware filtering (70% same category, 20% related, 10% diverse)
-                            if state.products_df is not None and len(candidate_items) > 0:
-                                # Get primary category from user's likes
-                                liked_products = state.products_df[state.products_df['id'].isin(liked_item_ids)]
-                                primary_category = liked_products['articleType'].mode().iloc[0] if len(liked_products) > 0 else None
-
-                                print(f"User's primary category: {primary_category}")
-
-                                # Sort candidates by score
-                                sorted_candidates = sorted(candidate_items.items(), key=lambda x: x[1], reverse=True)
-
-                                # Categorize candidates
-                                same_category = []
-                                related_category = []
-                                diverse_category = []
-
-                                RELATED_CATEGORIES = {
-                                    'Watches': ['Belts', 'Cufflinks', 'Ties', 'Wallets', 'Sunglasses'],
-                                    'Shoes': ['Socks', 'Flip Flops', 'Sandals', 'Shoe Accessories'],
-                                    'Shirts': ['Ties', 'Belts', 'Jackets', 'Sweaters']
-                                }
-
-                                for item_id, score in sorted_candidates:
-                                    product = state.products_df[state.products_df['id'] == item_id]
-                                    if len(product) > 0:
-                                        item_category = product.iloc[0]['articleType']
-
-                                        if item_category == primary_category:
-                                            same_category.append((item_id, score))
-                                        elif primary_category in RELATED_CATEGORIES and item_category in RELATED_CATEGORIES.get(primary_category, []):
-                                            related_category.append((item_id, score))
-                                        else:
-                                            diverse_category.append((item_id, score))
-
-                                # Build recommendations with 70:20:10 ratio
-                                print(f"Category breakdown: {len(same_category)} same, {len(related_category)} related, {len(diverse_category)} diverse")
-
-                                n_same = int(n * 0.7)
-                                n_related = int(n * 0.2)
-                                n_diverse = n - n_same - n_related
-
-                                cf_candidates = (
-                                    same_category[:n_same] +
-                                    related_category[:n_related] +
-                                    diverse_category[:n_diverse]
-                                )
+                                # Generate CF candidates using multi-interest approach
+                                cf_candidates = generate_multi_interest_cf_candidates(clusters, n=n)
+                                print(f"Generated {len(cf_candidates)} multi-interest CF recommendations")
+                            else:
+                                # Fallback: no significant clusters found
+                                print("No significant interest clusters detected, using popular items fallback")
+                                cf_candidates = []
 
                                 print(f"Targeting: {n_same} same, {n_related} related, {n_diverse} diverse")
 
