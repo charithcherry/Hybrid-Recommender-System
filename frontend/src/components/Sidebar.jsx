@@ -5,7 +5,8 @@ function Sidebar({ activeTab, onTabChange, user, interactionCount, onLogout }) {
   const tabs = [
     { id: 'all', icon: '📱', label: 'All Products' },
     { id: 'popular', icon: '🔥', label: 'Top 50' },
-    { id: 'foryou', icon: '✨', label: 'For You' }
+    { id: 'foryou', icon: '✨', label: 'For You' },
+    { id: 'chat', icon: '💬', label: 'Chat' }
   ];
 
   return (

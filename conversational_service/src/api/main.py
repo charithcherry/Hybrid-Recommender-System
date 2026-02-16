@@ -2,6 +2,7 @@
 
 import os
 import sys
+import json
 from pathlib import Path
 from typing import List, Optional, Dict
 from fastapi import FastAPI, HTTPException
@@ -73,6 +74,38 @@ class AppState:
 
 state = AppState()
 
+# Persistence paths
+CONVERSATIONS_DB_PATH = Path("data/conversations_db.json")
+
+
+def save_conversations_to_json():
+    """Save conversation history to JSON file."""
+    try:
+        CONVERSATIONS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONVERSATIONS_DB_PATH, 'w', encoding='utf-8') as f:
+            json.dump({
+                'conversations': state.conversation_history
+            }, f, indent=2, ensure_ascii=False)
+        print(f"Saved {len(state.conversation_history)} conversations to {CONVERSATIONS_DB_PATH}")
+    except Exception as e:
+        print(f"Error saving conversations: {e}")
+
+
+def load_conversations_from_json():
+    """Load conversation history from JSON file."""
+    try:
+        if CONVERSATIONS_DB_PATH.exists():
+            with open(CONVERSATIONS_DB_PATH, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                state.conversation_history = data.get('conversations', {})
+                print(f"Loaded {len(state.conversation_history)} conversations from {CONVERSATIONS_DB_PATH}")
+        else:
+            print("No existing conversation history found, starting fresh")
+            state.conversation_history = {}
+    except Exception as e:
+        print(f"Error loading conversations: {e}")
+        state.conversation_history = {}
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -118,6 +151,9 @@ async def startup_event():
             print("Falling back to FAISS only...")
             # Fallback to FAISS only
             state.hybrid_retriever = None
+
+        # Load conversation history from disk
+        load_conversations_from_json()
 
         print("Startup complete! Service ready on port 8001")
 
@@ -232,6 +268,22 @@ async def conversational_search(query: ConversationalQuery):
 
         # Generate conversation ID if not provided
         conv_id = query.conversation_id or f"conv_{int(time.time())}"
+
+        # Save conversation turn to history
+        if conv_id not in state.conversation_history:
+            state.conversation_history[conv_id] = []
+
+        conversation_turn = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "query": query.query,
+            "intent": intent,
+            "num_results": len(recommendations),
+            "retrieval_time_ms": retrieval_time
+        }
+        state.conversation_history[conv_id].append(conversation_turn)
+
+        # Persist to disk
+        save_conversations_to_json()
 
         return ConversationalResponse(
             query=query.query,

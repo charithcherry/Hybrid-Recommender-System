@@ -5,9 +5,17 @@
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8000';
+const CHAT_API_URL = 'http://localhost:8001';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+const chatApi = axios.create({
+  baseURL: CHAT_API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -130,6 +138,22 @@ export const getHealth = async () => {
 
 export const getStats = async () => {
   const response = await api.get('/stats');
+  return response.data;
+};
+
+// Conversational Chat (port 8001)
+export const sendChatMessage = async (query, userId = null, conversationId = null, n = 10) => {
+  const response = await chatApi.post('/chat', {
+    query,
+    user_id: userId,
+    conversation_id: conversationId,
+    n
+  });
+  return response.data;
+};
+
+export const getConversationHistory = async (conversationId) => {
+  const response = await chatApi.get(`/conversations/${conversationId}`);
   return response.data;
 };
 

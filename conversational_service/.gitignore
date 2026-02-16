@@ -24,6 +24,9 @@ ENV/
 # Logs
 *.log
 
+# Data (conversation history contains user data)
+data/
+
 # OS
 .DS_Store
 Thumbs.db

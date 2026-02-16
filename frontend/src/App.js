@@ -13,6 +13,7 @@ import Sidebar from './components/Sidebar';
 import FilterBar from './components/FilterBar';
 import AllProducts from './components/AllProducts';
 import ProductGrid from './components/ProductGrid';
+import Chat from './components/Chat';
 import {
   getColdStartRecommendations,
   getSplitRecommendations,
@@ -227,8 +228,10 @@ function App() {
           <h1 className="app-title">Fashion Recommender 🛍️</h1>
         </div>
 
-        {/* Filter Bar */}
-        <FilterBar filters={filters} onFilterChange={handleFilterChange} />
+        {/* Filter Bar (hide on chat tab) */}
+        {activeTab !== 'chat' && (
+          <FilterBar filters={filters} onFilterChange={handleFilterChange} />
+        )}
 
         {/* Content Area */}
         <div className="content-area">
@@ -326,6 +329,14 @@ function App() {
                 </>
               )}
             </div>
+          )}
+
+          {activeTab === 'chat' && (
+            <Chat
+              userId={userId}
+              onInteraction={handleInteraction}
+              interactionStates={interactionStates}
+            />
           )}
         </div>
       </div>
