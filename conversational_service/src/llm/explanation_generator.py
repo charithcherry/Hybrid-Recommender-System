@@ -1,7 +1,7 @@
 """LLM-based explanation generator for recommendations."""
 
 from typing import List, Dict, Optional
-from openai import OpenAI
+# from openai import OpenAI  # Not needed for generate_simple_explanation
 
 
 EXPLANATION_PROMPT = """You are a helpful fashion shopping assistant. Explain why these products match the user's request.
@@ -31,7 +31,7 @@ async def generate_explanations(
     products: List[Dict],
     query: str,
     intent: Dict,
-    openai_client: OpenAI,
+    openai_client,  # Type removed since OpenAI not imported
     model: str = "gpt-4o-mini"
 ) -> List[Dict]:
     """
