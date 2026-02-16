@@ -151,8 +151,8 @@ function Chat({ userId, onInteraction, interactionStates }) {
                         <div key={product.item_id} className="chat-product-card">
                           <ProductCard
                             product={{
-                              id: product.item_id,
-                              productDisplayName: product.title,
+                              item_id: product.item_id,
+                              title: product.title,
                               ...product.metadata
                             }}
                             score={product.score}
