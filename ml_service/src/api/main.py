@@ -1034,6 +1034,18 @@ async def get_split_recommendations(
                                 # Generate CF candidates using multi-interest approach
                                 cf_candidates = generate_multi_interest_cf_candidates(clusters, n=n)
                                 print(f"Generated {len(cf_candidates)} multi-interest CF recommendations")
+
+                                # Apply filters to CF candidates
+                                cf_candidate_ids = [item_id for item_id, _ in cf_candidates]
+                                filtered_cf_ids = apply_filters(cf_candidate_ids)
+                                print(f"After filters: {len(filtered_cf_ids)} CF candidates")
+
+                                # Add to cf_recommendations
+                                for item_id in filtered_cf_ids[:n]:
+                                    score = next((s for i, s in cf_candidates if i == item_id), 3.5)
+                                    cf_recommendations.append((item_id, score))
+
+                                print(f"Final CF recommendations: {len(cf_recommendations)} items")
                             else:
                                 # Fallback: no significant clusters found
                                 print("No significant interest clusters detected, skipping CF recommendations")
