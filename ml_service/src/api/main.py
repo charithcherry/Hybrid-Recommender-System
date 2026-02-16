@@ -1,5 +1,6 @@
 """FastAPI service for multimodal recommender system."""
 
+import os
 import sys
 from pathlib import Path
 from typing import List, Optional, Dict, Literal, Tuple

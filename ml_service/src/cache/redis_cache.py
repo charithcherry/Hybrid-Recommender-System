@@ -51,6 +51,7 @@ class RedisCache:
         self.port = int(port or os.getenv("REDIS_PORT", "6379"))
         self.db = int(db or os.getenv("REDIS_DB", "0"))
         self.password = password or os.getenv("REDIS_PASSWORD") or None
+        self.username = os.getenv("REDIS_USERNAME", "default")
 
         print(f"Connecting to Redis at {self.host}:{self.port}...")
 
@@ -58,6 +59,7 @@ class RedisCache:
             host=self.host,
             port=self.port,
             db=self.db,
+            username=self.username,
             password=self.password,
             decode_responses=decode_responses,
             socket_keepalive=True,
@@ -70,10 +72,10 @@ class RedisCache:
         """Check if Redis is available."""
         try:
             self.client.ping()
-            print("✓ Redis connected successfully")
+            print("[OK] Redis connected successfully")
             return True
         except (redis.ConnectionError, redis.TimeoutError) as e:
-            print(f"✗ Redis not available: {e}")
+            print(f"[WARN] Redis not available: {e}")
             print("  Cache will be disabled (everything will still work)")
             return False
 
@@ -352,7 +354,7 @@ class RedisCache:
 
         try:
             self.client.flushdb()
-            print("✓ Cache flushed")
+            print("[OK] Cache flushed")
             return True
         except Exception as e:
             print(f"Flush error: {e}")
