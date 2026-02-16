@@ -1036,20 +1036,8 @@ async def get_split_recommendations(
                                 print(f"Generated {len(cf_candidates)} multi-interest CF recommendations")
                             else:
                                 # Fallback: no significant clusters found
-                                print("No significant interest clusters detected, using popular items fallback")
+                                print("No significant interest clusters detected, skipping CF recommendations")
                                 cf_candidates = []
-
-                                print(f"Targeting: {n_same} same, {n_related} related, {n_diverse} diverse")
-
-                                # Apply filters
-                                filtered_ids = apply_filters([item_id for item_id, _ in cf_candidates])
-
-                                for item_id in filtered_ids[:n]:
-                                    score = next((s for i, s in cf_candidates if i == item_id), 3.0)
-                                    normalized_score = 2.0 + min(score, 3.0)
-                                    cf_recommendations.append((item_id, normalized_score))
-
-                                print(f"CF via user similarity: {len(cf_recommendations)} items ({len([i for i, s in cf_candidates if i in [iid for iid, _ in same_category]])} same category)")
 
                 except Exception as e:
                     print(f"Error generating user-similarity CF: {e}")

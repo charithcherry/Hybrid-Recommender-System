@@ -1,0 +1,29 @@
+
+This will migrate all 44K products to Qdrant.
+Estimated time: 1-2 minutes
+
+======================================================================
+FAISS TO QDRANT MIGRATION (No Docker Required!)
+======================================================================
+
+1. Loading data...
+   [OK] 44072 embeddings loaded (0.39s)
+   [OK] 44072 products loaded
+
+2. Initializing Qdrant...
+Initializing Qdrant (no Docker required)...
+Traceback (most recent call last):
+  File "C:\Users\chari\MultiModelRC\ml_service\src\embeddings\vector_db\migrate_to_qdrant.py", line 109, in <module>
+    qdrant = migrate_faiss_to_qdrant(
+        storage_path=args.storage,
+        batch_size=args.batch_size
+    )
+  File "C:\Users\chari\MultiModelRC\ml_service\src\embeddings\vector_db\migrate_to_qdrant.py", line 46, in migrate_faiss_to_qdrant
+    qdrant = QdrantVectorDB(storage_path=storage_path)
+  File "C:\Users\chari\MultiModelRC\ml_service\src\embeddings\vector_db\qdrant\client.py", line 31, in __init__
+    print(f"\u2713 Qdrant initialized at {storage_path}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\chari\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 0: character maps to <undefined>

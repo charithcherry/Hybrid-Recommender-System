@@ -63,6 +63,9 @@ ml_service/models/**/*.h5
 ml_service/models/**/*.pth
 ml_service/models/**/*.index
 
+# Qdrant vector database (regenerate locally)
+ml_service/qdrant_data/
+
 # MLflow
 mlruns/
 mlartifacts/

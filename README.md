@@ -611,12 +611,21 @@ docker-compose up --build
 - [x] Real-time interaction counting
 - [x] Category-aware filtering (70:20:10)
 - [x] FAISS index with all 44K items
+- [x] Formal model evaluation (Precision@K, Recall@K, NDCG)
+- [x] Adaptive weighting (cold/warm/established user tiers)
+- [x] Multi-interest clustering (PinnerSage-inspired)
+
+**Conversational Service:**
+- [x] Natural language query interface (Gemini LLM)
+- [x] Hybrid FAISS+Qdrant retrieval system
+- [x] Intent parsing and filter extraction
+- [x] Qdrant vector DB migration (44K products, 227MB)
+- [x] Smart retrieval dispatch (FAISS for simple, Qdrant for filtered)
 
 ### 🔄 In Progress
 
-- [ ] Formal model evaluation (Precision@K, Recall@K, NDCG)
-- [ ] Adaptive weighting (based on interaction count)
-- [ ] Multi-interest clustering (PinnerSage-style)
+- [ ] Chat interface in frontend
+- [ ] Conversation history persistence
 
 ### 📋 Planned
 
