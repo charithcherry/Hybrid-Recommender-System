@@ -177,6 +177,7 @@ class AppState:
         self.config = None
         self.start_time = time.time()
         self.request_count = 0
+        self.cache = None  # Redis cache instance
 
         # Full CLIP embeddings for all 44K products
         self.full_embeddings = None
@@ -616,6 +617,18 @@ async def startup_event():
         else:
             print("Warning: Could not build specialist index - missing data")
 
+        # Initialize Redis cache
+        try:
+            from src.cache import get_cache
+            state.cache = get_cache()
+            if state.cache.enabled:
+                print("Redis cache initialized")
+            else:
+                print("Redis not available - caching disabled (system will work without cache)")
+        except Exception as e:
+            print(f"Redis initialization failed: {e}")
+            print("Continuing without cache...")
+
         print("Startup complete!")
 
     except Exception as e:
@@ -669,6 +682,15 @@ async def get_stats():
         model_type="two_stage_pipeline",
         uptime_seconds=time.time() - state.start_time
     )
+
+
+@app.get("/cache/stats")
+async def get_cache_stats():
+    """Get Redis cache statistics."""
+    if state.cache and state.cache.enabled:
+        return state.cache.get_stats()
+    else:
+        return {"enabled": False, "message": "Redis cache is not enabled"}
 
 
 @app.post("/recommend", response_model=RecommendationResponse)
@@ -965,6 +987,21 @@ async def get_split_recommendations(
     if state.candidate_generator is None:
         raise HTTPException(status_code=503, detail="Models not loaded")
 
+    # Check cache first
+    filters_dict = {
+        "gender": gender, "masterCategory": masterCategory, "subCategory": subCategory,
+        "articleType": articleType, "baseColour": baseColour, "season": season, "usage": usage
+    }
+    filters_dict = {k: v for k, v in filters_dict.items() if v is not None}
+
+    if state.cache and state.cache.enabled:
+        cached = state.cache.get_recommendations(user_id, "split", filters_dict)
+        if cached:
+            print(f"[CACHE HIT] Returning cached recommendations for user {user_id}")
+            cached["retrieval_time_ms"] = (time.time() - start_time) * 1000
+            cached["from_cache"] = True
+            return SplitRecommendationResponse(**cached)
+
     try:
         cf_recommendations = []
         content_recommendations = []
@@ -1195,13 +1232,21 @@ async def get_split_recommendations(
 
         retrieval_time = (time.time() - start_time) * 1000
 
-        return SplitRecommendationResponse(
-            user_id=user_id,
-            cf_recommendations=cf_enriched,
-            content_recommendations=content_enriched,
-            retrieval_time_ms=retrieval_time,
-            timestamp=datetime.now().isoformat()
-        )
+        response_data = {
+            "user_id": user_id,
+            "cf_recommendations": [item.dict() for item in cf_enriched],
+            "content_recommendations": [item.dict() for item in content_enriched],
+            "retrieval_time_ms": retrieval_time,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        # Cache the response
+        if state.cache and state.cache.enabled:
+            cache_ttl = int(os.getenv("CACHE_RECOMMENDATIONS_TTL", "300"))
+            state.cache.set_recommendations(user_id, response_data, "split", filters_dict, cache_ttl)
+            print(f"[CACHE SET] Cached recommendations for user {user_id} (TTL: {cache_ttl}s)")
+
+        return SplitRecommendationResponse(**response_data)
 
     except Exception as e:
         print(f"Error generating split recommendations: {e}")
@@ -1618,6 +1663,13 @@ async def track_interaction(interaction: InteractionRequest):
 
     save_interactions_to_json()
     save_interaction_states_to_json()
+
+    # Invalidate cached recommendations and user embedding
+    if state.cache and state.cache.enabled:
+        deleted_recs = state.cache.invalidate_user_recommendations(interaction.user_id)
+        state.cache.invalidate_user_embedding(interaction.user_id)
+        if deleted_recs > 0:
+            print(f"[CACHE] Invalidated {deleted_recs} cached recommendations for user {interaction.user_id}")
 
     print(f"[{action.upper()}] {message} for user {interaction.user_id}, item {interaction.item_id}")
 
